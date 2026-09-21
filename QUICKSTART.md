@@ -1,227 +1,132 @@
-# QUICKSTART - Paso a Paso
+# QUICKSTART — Paso a paso
 
-
-**API REST en C# .NET** que demuestra 4 **tácticas de arquitectura**:
-1.  **Rendimiento** - Múltiples copias (3 réplicas + Nginx)
-2.  **Autenticación** - Verificación de identidad (bcrypt)
-3.  **Identificación** - Transportar identidad (JWT)
-4.  **Autorización** - Control de acceso (RBAC)
+API REST de **gestión de emergencias médicas** que demuestra:
+1. **Componentes e interfaces** — 5 componentes (Recursos, Emergencias, Clasificación, Asignación, Seguridad)
+2. **Escalabilidad horizontal** — 3 réplicas + Nginx
+3. **Contenedores** — Docker / docker-compose
+4. **ACID** — transacción con bloqueo de fila al asignar un recurso
+5. **Servicios sin estado** — JWT, sin sesión en el servidor
 
 ---
 
-##  PASO 1: INICIO RÁPIDO
+## PASO 1: Levantar todo
 
-### Con Docker (Recomendado)
 ```bash
-docker-compose up --build
+docker compose up --build
 ```
 
-**Listo.** La API está en `http://localhost:8080`
+Esto levanta: PostgreSQL, 3 réplicas de la API (`app1`, `app2`, `app3`) y Nginx como balanceador.
+La API queda disponible en `http://localhost:8080`.
 
-### Sin Docker (con .NET 8.0)
+Sin Docker (necesita un PostgreSQL corriendo en `localhost:5432`, user/pass `postgres`/`postgres`):
 ```bash
 dotnet restore
-dotnet build
 dotnet run
 ```
-
-API en `http://localhost:3000`
+API en `http://localhost:3000`.
 
 ---
 
-## PASO 2: USUARIOS DE PRUEBA
+## PASO 2: Usuarios de prueba (semilla automática)
 
 | Username | Password | Rol |
-|----------|----------|-----|
+|---|---|---|
 | admin | admin123 | admin |
-| user | user123 | user |
+| operador | operador123 | operador |
+
+También se siembran 3 recursos médicos de ejemplo (2 ambulancias + 1 cama UCI).
 
 ---
 
-## PASO 3: PRUEBAS PRÁCTICAS
-
-### 1. Login (obtener token)
-```bash
-curl -X POST http://localhost:8080/login \
-  -H "Content-Type: application/json" \
-  -d '{"username":"admin","password":"admin123"}'
-```
-
-**Copiar el token del response:**
-```json
-{
-  "token": "eyJhbGc...",
-  "user": { "id": 1, "username": "admin", "role": "admin" }
-}
-```
-
-### 2. Guardar el token en una variable
-```bash
-TOKEN="eyJhbGc..."
-```
-
-### 3. Obtener mis tareas (autenticado)
-```bash
-curl -H "Authorization: Bearer $TOKEN" \
-  http://localhost:8080/tasks
-```
-
-### 4. Crear una tarea
-```bash
-curl -X POST http://localhost:8080/tasks \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"title":"Mi tarea","description":"Descripción"}'
-```
-
-### 5. Listar usuarios (solo admin)
-```bash
-curl -H "Authorization: Bearer $TOKEN" \
-  http://localhost:8080/users
-```
-
-### 6. Eliminar tarea (solo admin)
-```bash
-curl -X DELETE http://localhost:8080/tasks/1 \
-  -H "Authorization: Bearer $TOKEN"
-```
-
-### 7. Ver info de la API
-```bash
-curl http://localhost:8080/info
-```
-
-### 8. Health check
-```bash
-curl http://localhost:8080/health
-```
-
----
-
-## TODOS LOS ENDPOINTS
-
-| Método | Ruta | Auth | Descripción |
-|--------|------|------|---|
-| POST | `/login` | ❌ | Obtener token |
-| GET | `/health` | ❌ | Estado del servidor |
-| GET | `/info` | ❌ | Info de la API |
-| GET | `/tasks` | ✅ | Mis tareas |
-| POST | `/tasks` | ✅ | Crear tarea |
-| DELETE | `/tasks/{id}` | ✅ | Eliminar (solo admin) |
-| GET | `/users` | ✅ | Listar usuarios (solo admin) |
-
----
-
-##  ¿Cómo sé que funciona?
-
-Cada response incluye `nodeId` (node-1, node-2, node-3) mostrando cuál réplica procesó la request:
-
-```bash
-curl http://localhost:8080/health | jq .nodeId
-# node-1, node-2, o node-3 ← verificas load balancing
-```
-
----
-
-##  DETENER TODO
-
-```bash
-docker-compose down
-```
-
----
-
-##  ¿Qué tácticas ve en cada paso?
-
-| Paso | Táctica | Descripción |
-|------|---------|---|
-| Login | Autenticación | Credenciales → bcrypt → token |
-| Token | Identificación | JWT transporta identidad |
-| GET /tasks | Identificación | Servidor sabe quién sos |
-| DELETE (admin) | Autorización | Solo admin puede |
-| 3 réplicas | Rendimiento | Nginx balancea entre nodes |
-
----
-
-## CARACTERÍSTICAS
- 
-3 réplicas + load balancer  
-Autenticación y autorización  
-
----
-
-## TÁCTICAS IMPLEMENTADAS
-
-###  TÁCTICA 1: Mantener múltiples copias de cómputo
-- 3 réplicas independientes de la aplicación
-- Nginx distribuye requests en round-robin
-- Mejor rendimiento y escalabilidad
-
-###  TÁCTICA 2: Autenticar actores
-- POST /login verifica credenciales con bcrypt
-- Emite JWT token solo si autenticación exitosa
-- Contraseñas hasheadas de forma segura
-
-###  TÁCTICA 3: Identificar actores
-- JWT tokens transportan identidad (id, username, role)
-- Cada request autenticado lleva el token
-- Logs registran qué usuario realizó cada acción
-
-###  TÁCTICA 4: Autorizar actores
-- Control basado en roles (RBAC)
-- Atributo [Authorize(Roles = "admin")] en endpoints
-- Admin: eliminar tareas, listar usuarios
-- User: crear/ver tareas propias
-
----
-
-## TECNOLOGÍA
-
-**Lenguaje:** C# 8.0+
-**Framework:** ASP.NET Core 8.0
-**Dependencias:**
-- Microsoft.AspNetCore.Authentication.JwtBearer
-- System.IdentityModel.Tokens.Jwt
-- BCrypt.Net-Next
-
-**Containerización:** Docker + Nginx
-**Base de datos:** Simulada (en memoria)
-
----
-
-
-## EJEMPLO DE USO
+## PASO 3: Probar a mano con curl
 
 ### 1. Login
 ```bash
 curl -X POST http://localhost:8080/login \
   -H "Content-Type: application/json" \
-  -d '{"username":"admin","password":"admin123"}'
+  -d '{"username":"operador","password":"operador123"}'
 ```
-
-Respuesta:
-```json
-{
-  "message": "Login exitoso",
-  "token": "eyJhbGc...",
-  "user": {"id": 1, "username": "admin", "role": "admin"},
-  "nodeId": "node-2"
-}
-```
-
-### 2. Usar token
+Guardá el token:
 ```bash
-TOKEN="eyJhbGc..."
-curl -H "Authorization: Bearer $TOKEN" \
-  http://localhost:8080/tasks
+TOKEN="<pegar token del response>"
 ```
 
-### 3. Admin elimina tarea
+### 2. Registrar una emergencia (se clasifica automáticamente por gravedad 1-10)
 ```bash
-TOKEN="eyJhbGc..."
-curl -X DELETE http://localhost:8080/tasks/1 \
-  -H "Authorization: Bearer $TOKEN"
+curl -X POST http://localhost:8080/emergencias \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"descripcion":"Accidente de tránsito","ubicacion":"Av. Siempreviva 742","gravedad":8}'
+```
+
+### 3. Ver recursos disponibles
+```bash
+curl -H "Authorization: Bearer $TOKEN" http://localhost:8080/recursos
+```
+
+### 4. Asignar un recurso a la emergencia (operación transaccional)
+```bash
+curl -X POST http://localhost:8080/asignaciones \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"emergenciaId":1,"recursoId":1}'
+```
+Si el recurso ya fue asignado por otra petición concurrente, responde `409 Conflict`.
+
+### 5. Ver auditoría (solo admin)
+```bash
+ADMIN_TOKEN=$(curl -s -X POST http://localhost:8080/login -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"admin123"}' | grep -o '"token":"[^"]*"' | cut -d'"' -f4)
+
+curl -H "Authorization: Bearer $ADMIN_TOKEN" http://localhost:8080/auditoria
+```
+
+### 6. Health / info
+```bash
+curl http://localhost:8080/health
+curl http://localhost:8080/info
 ```
 
 ---
 
+## Todos los endpoints
+
+| Método | Ruta | Auth | Descripción |
+|---|---|---|---|
+| POST | `/login` | ❌ | Autenticación, devuelve JWT |
+| GET | `/health` | ❌ | Estado + nodeId de la réplica que respondió |
+| GET | `/info` | ❌ | Info de componentes y tácticas |
+| GET | `/emergencias` | ✅ | Listar emergencias |
+| POST | `/emergencias` | ✅ | Registrar emergencia (se clasifica por gravedad) |
+| GET | `/recursos` | ✅ | Listar recursos médicos |
+| POST | `/recursos` | ✅ admin | Crear recurso médico |
+| GET | `/asignaciones` | ✅ | Listar asignaciones |
+| POST | `/asignaciones` | ✅ | Asignar un recurso a una emergencia (transacción ACID) |
+| GET | `/auditoria` | ✅ admin | Ver registro de auditoría |
+
+---
+
+## Scripts de demostración
+
+Con el stack corriendo (`docker compose up --build`), en otra terminal (bash/Git Bash):
+
+```bash
+bash scripts/run-all-demos.sh
+```
+
+O cada uno por separado:
+
+- `scripts/demo-seguridad.sh` — autenticar / identificar / autorizar actores (401, 403, 200)
+- `scripts/demo-escalabilidad.sh` — 6 requests a `/health`, mostrando el `nodeId` que respondió cada vez (round-robin entre las 3 réplicas)
+- `scripts/demo-acid.sh` — dispara **dos asignaciones concurrentes** sobre el **mismo recurso**, a través de réplicas distintas, y muestra que la transacción con `SELECT ... FOR UPDATE` deja pasar solo una
+
+---
+
+## Detener todo
+
+```bash
+docker compose down
+```
+
+Para borrar también los datos persistidos:
+```bash
+docker compose down -v
+```

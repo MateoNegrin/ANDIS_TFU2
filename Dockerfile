@@ -19,6 +19,10 @@ RUN dotnet publish TFU_Architecture_Tactics.csproj -c Release -o /app/publish
 # Stage 2: Runtime
 FROM mcr.microsoft.com/dotnet/aspnet:8.0
 
+# curl es usado por el healthcheck de docker-compose
+RUN apt-get update && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
 # Copiar compilados del stage anterior
