@@ -1,71 +1,153 @@
 version: '3.8'
 
 services:
-  # Nginx como load balancer (balancear entre múltiples copias)
+  # Base de datos PostgreSQL
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: emergencies
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - emergencias-net
+    expose:
+      - "5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # Redis para Cache-Aside
+  redis:
+    image: redis:7-alpine
+    networks:
+      - emergencias-net
+    expose:
+      - "6379"
+    restart: unless-stopped
+
+  # Nginx como Gateway (load balancer + TLS + rate limiting)
   nginx:
     image: nginx:alpine
     ports:
-      - "8080:80"
+      - "80:80"
+      - "443:443"
     volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/upstreams:/etc/nginx/upstreams:ro
+      - ./nginx/certs:/etc/nginx/certs:ro
+    networks:
+      - emergencias-net
     depends_on:
-      - app1
-      - app2
-      - app3
-    networks:
-      - app-network
+      - api-a
+      - api-b
+      - api-query
+    restart: unless-stopped
 
-  # Réplica 1 de la aplicación
-  app1:
+  # API instancia 1 (COMMANDS)
+  api-a:
     build: .
     environment:
-      - PORT=3000
-      - NODE_ID=node-1
-      - JWT_SECRET=your-super-secret-key-change-in-production
-    ports:
-      - "3001:3000"
+      APP_ROLE: commands
+      APP_VERSION: v1
+      INSTANCE_NAME: api-a
+      CACHE_ENABLED: "true"
+      CACHE_TTL_SECONDS: "60"
+      CB_FAILURE_THRESHOLD: "3"
+      CB_OPEN_SECONDS: "10"
+      JWT_SECRET: dev-secret-change-in-production
+      ASPNETCORE_URLS: http://+:5000
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__DefaultConnection: "Server=db;Database=emergencies;Username=postgres;Password=postgres;Timeout=2;"
     networks:
-      - app-network
+      - emergencias-net
+    expose:
+      - "5000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
-      interval: 10s
-      timeout: 5s
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:5000/health"]
+      interval: 3s
+      timeout: 2s
       retries: 3
+      start_period: 5s
+    restart: unless-stopped
 
-  # Réplica 2 de la aplicación
-  app2:
+  # API instancia 2 (COMMANDS)
+  api-b:
     build: .
     environment:
-      - PORT=3000
-      - NODE_ID=node-2
-      - JWT_SECRET=your-super-secret-key-change-in-production
-    ports:
-      - "3002:3000"
+      APP_ROLE: commands
+      APP_VERSION: v1
+      INSTANCE_NAME: api-b
+      CACHE_ENABLED: "true"
+      CACHE_TTL_SECONDS: "60"
+      CB_FAILURE_THRESHOLD: "3"
+      CB_OPEN_SECONDS: "10"
+      JWT_SECRET: dev-secret-change-in-production
+      ASPNETCORE_URLS: http://+:5000
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__DefaultConnection: "Server=db;Database=emergencies;Username=postgres;Password=postgres;Timeout=2;"
     networks:
-      - app-network
+      - emergencias-net
+    expose:
+      - "5000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
-      interval: 10s
-      timeout: 5s
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:5000/health"]
+      interval: 3s
+      timeout: 2s
       retries: 3
+      start_period: 5s
+    restart: unless-stopped
 
-  # Réplica 3 de la aplicación
-  app3:
+  # API instancia QUERIES (separada, escalable independientemente)
+  api-query:
     build: .
     environment:
-      - PORT=3000
-      - NODE_ID=node-3
-      - JWT_SECRET=your-super-secret-key-change-in-production
-    ports:
-      - "3003:3000"
+      APP_ROLE: queries
+      APP_VERSION: v1
+      INSTANCE_NAME: api-query
+      CACHE_ENABLED: "true"
+      CACHE_TTL_SECONDS: "60"
+      CB_FAILURE_THRESHOLD: "3"
+      CB_OPEN_SECONDS: "10"
+      JWT_SECRET: dev-secret-change-in-production
+      ASPNETCORE_URLS: http://+:5000
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__DefaultConnection: "Server=db;Database=emergencies;Username=postgres;Password=postgres;Timeout=2;"
     networks:
-      - app-network
+      - emergencias-net
+    expose:
+      - "5000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
-      interval: 10s
-      timeout: 5s
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:5000/health"]
+      interval: 3s
+      timeout: 2s
       retries: 3
+      start_period: 5s
+    restart: unless-stopped
 
 networks:
-  app-network:
+  emergencias-net:
     driver: bridge
+
+volumes:
+  postgres_data:
+

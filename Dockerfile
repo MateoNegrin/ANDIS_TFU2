@@ -5,7 +5,6 @@ WORKDIR /src
 
 # Copiar archivos de proyecto
 COPY TFU_Architecture_Tactics.csproj .
-COPY *.cs ./
 
 # Restaurar dependencias
 RUN dotnet restore TFU_Architecture_Tactics.csproj
@@ -24,8 +23,9 @@ WORKDIR /app
 # Copiar compilados del stage anterior
 COPY --from=build /app/publish .
 
-# Exponer puerto
-EXPOSE 3000
+# Exponer puerto (usado por la aplicación)
+EXPOSE 5000
 
 # Comando para iniciar la aplicación
 ENTRYPOINT ["dotnet", "TFU_Architecture_Tactics.dll"]
+
